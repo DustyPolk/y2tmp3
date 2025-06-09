@@ -3,9 +3,9 @@ name = "y2tmp3"
 version = "1.0.0"
 description = "A simple CLI tool to download YouTube videos as MP3 files"
 readme = "README.md"
-requires-python = ">=3.6"
+requires-python = ">=3.9"
 dependencies = [
-    "yt-dlp>=2023.1.6",
+    "yt-dlp>=2025.05.22",
 ]
 
 [project.scripts]

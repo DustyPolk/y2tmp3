@@ -43,6 +43,10 @@ def download_youtube_as_mp3(url, output_path=None):
                 'nocheckcertificate': False,
                 # Limit download size (500MB)
                 'max_filesize': 500 * 1024 * 1024,
+                # Compatibility with newer yt-dlp versions
+                'extract_flat': False,
+                'writethumbnail': False,
+                'writeinfojson': False,
             }
             
             # Download the file
@@ -50,7 +54,7 @@ def download_youtube_as_mp3(url, output_path=None):
                 ydl_download.download([url])
                 
             return safe_filename
-    except yt_dlp.utils.DownloadError as e:
+    except yt_dlp.DownloadError as e:
         if "Video unavailable" in str(e):
             raise Exception("Video is unavailable or has been removed")
         elif "Private video" in str(e):
@@ -59,7 +63,7 @@ def download_youtube_as_mp3(url, output_path=None):
             raise Exception("Video is age-restricted")
         else:
             raise Exception(f"Download failed: {str(e)}")
-    except yt_dlp.utils.ExtractorError as e:
+    except yt_dlp.ExtractorError as e:
         raise Exception(f"Failed to extract video information: {str(e)}")
     except Exception as e:
         raise Exception(f"Unexpected error: {str(e)}")
@@ -67,10 +71,20 @@ def download_youtube_as_mp3(url, output_path=None):
 
 def progress_hook(d):
     if d['status'] == 'downloading':
-        percent = d.get('_percent_str', 'N/A')
-        speed = d.get('_speed_str', 'N/A')
-        print(f"\rDownloading: {percent} at {speed}", end='', flush=True)
+        # Use safer progress reporting for newer yt-dlp versions
+        downloaded = d.get('downloaded_bytes', 0)
+        total = d.get('total_bytes') or d.get('total_bytes_estimate', 0)
+        if total and total > 0:
+            percent_str = f"{(downloaded/total)*100:.1f}%"
+        else:
+            percent_str = "N/A"
+        speed = d.get('speed')
+        if speed:
+            speed_str = f"{speed/1024/1024:.1f} MB/s"
+        else:
+            speed_str = "N/A"
+        print(f"\rDownloading: {percent_str} at {speed_str}", end='', flush=True)
     elif d['status'] == 'finished':
         print("\nDownload complete. Converting to MP3...")
     elif d['status'] == 'error':
-        print("\nError occurred during download.")
+        print(f"\nError occurred during download: {d.get('error', 'Unknown error')}")
