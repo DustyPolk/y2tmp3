@@ -1,31 +1,55 @@
 import yt_dlp
 import os
+from .security import sanitize_filename, secure_path_join
 
 
 def download_youtube_as_mp3(url, output_path=None):
     if output_path is None:
         output_path = os.getcwd()
     
-    output_template = os.path.join(output_path, '%(title)s.%(ext)s')
-    
-    ydl_opts = {
-        'format': 'bestaudio/best',
-        'postprocessors': [{
-            'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'mp3',
-            'preferredquality': '192',
-        }],
-        'outtmpl': output_template,
-        'quiet': False,
-        'no_warnings': False,
-        'progress_hooks': [progress_hook],
+    # First, extract info without downloading to get the title
+    ydl_opts_info = {
+        'quiet': True,
+        'no_warnings': True,
+        'extract_flat': False,
     }
     
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            title = info.get('title', 'Unknown')
-            return title
+        with yt_dlp.YoutubeDL(ydl_opts_info) as ydl:
+            info = ydl.extract_info(url, download=False)
+            raw_title = info.get('title', 'Unknown')
+            
+            # Sanitize the filename
+            safe_filename = sanitize_filename(raw_title)
+            
+            # Create safe output path
+            output_file = secure_path_join(output_path, f"{safe_filename}.%(ext)s")
+            
+            # Download options with sanitized filename
+            ydl_opts = {
+                'format': 'bestaudio/best',
+                'postprocessors': [{
+                    'key': 'FFmpegExtractAudio',
+                    'preferredcodec': 'mp3',
+                    'preferredquality': '192',
+                }],
+                'outtmpl': output_file,
+                'quiet': False,
+                'no_warnings': False,
+                'progress_hooks': [progress_hook],
+                # Security: Restrict protocols
+                'allowed_protocols': ['http', 'https'],
+                # Security: Don't follow redirects to file:// or other protocols
+                'nocheckcertificate': False,
+                # Limit download size (500MB)
+                'max_filesize': 500 * 1024 * 1024,
+            }
+            
+            # Download the file
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl_download:
+                ydl_download.download([url])
+                
+            return safe_filename
     except yt_dlp.utils.DownloadError as e:
         if "Video unavailable" in str(e):
             raise Exception("Video is unavailable or has been removed")

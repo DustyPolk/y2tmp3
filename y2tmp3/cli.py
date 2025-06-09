@@ -3,6 +3,7 @@ import sys
 import os
 from .downloader import download_youtube_as_mp3
 from .utils import check_ffmpeg_installed
+from .security import validate_youtube_url, validate_output_directory
 
 
 __version__ = "1.0.0"
@@ -33,18 +34,24 @@ def main():
     
     args = parser.parse_args()
     
+    # Validate YouTube URL
+    if not validate_youtube_url(args.youtube_url):
+        print("Error: Invalid YouTube URL.")
+        print("Please provide a valid YouTube URL (e.g., https://www.youtube.com/watch?v=VIDEO_ID)")
+        sys.exit(1)
+    
     if not check_ffmpeg_installed():
         print("Error: ffmpeg is not installed or not in PATH.")
         print("Please install ffmpeg to use this tool.")
         print("Visit https://ffmpeg.org/download.html for installation instructions.")
         sys.exit(1)
     
-    if not os.path.exists(args.output):
-        print(f"Error: Output directory '{args.output}' does not exist.")
-        sys.exit(1)
+    # Normalize output path to absolute
+    args.output = os.path.abspath(args.output)
     
-    if not os.access(args.output, os.W_OK):
-        print(f"Error: No write permission for directory '{args.output}'.")
+    if not validate_output_directory(args.output):
+        print("Error: Invalid output directory.")
+        print("Please ensure the directory exists, is writable, and is not a system directory.")
         sys.exit(1)
     
     try:

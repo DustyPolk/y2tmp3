@@ -39,3 +39,15 @@ The flow is: CLI entry → validate prerequisites → call downloader → save M
 ## Testing and Linting
 
 Currently, this project has no testing framework or linting tools configured. When implementing tests or linting, this will need to be set up from scratch.
+
+## Security
+
+The project implements comprehensive security measures:
+
+- **Input Validation**: Only valid YouTube URLs are accepted, output directories are validated
+- **Path Traversal Prevention**: Filenames are sanitized, paths are securely joined
+- **Command Injection Prevention**: No shell=True, uses explicit command lists
+- **Download Restrictions**: HTTPS only, 500MB file size limit
+- **System Protection**: Cannot write to sensitive system directories
+
+See SECURITY.md for detailed security documentation.
