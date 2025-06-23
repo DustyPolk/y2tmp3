@@ -98,8 +98,6 @@ class PlaylistDownloader:
 
     def download_playlist(self, url: str, show_progress: bool = True) -> dict:
         """Download entire playlist with progress tracking."""
-        console.print(f"[blue]Extracting playlist information...[/blue]")
-        
         try:
             videos = self.extract_playlist_info(url)
         except Exception as e:
@@ -110,9 +108,9 @@ class PlaylistDownloader:
             console.print("[yellow]No videos found in playlist[/yellow]")
             return {"success": 0, "failed": 0, "errors": ["No videos found"]}
 
-        console.print(f"[green]Found {len(videos)} videos in playlist[/green]")
-        
-        if show_progress:
+        # Only show playlist preview for actual playlists (more than 1 video)
+        if show_progress and len(videos) > 1:
+            console.print(f"[green]Found {len(videos)} videos in playlist[/green]")
             self._show_playlist_preview(videos)
 
         # Download videos concurrently
@@ -126,7 +124,9 @@ class PlaylistDownloader:
             console=console,
         ) as progress:
             
-            task = progress.add_task("Downloading playlist...", total=len(videos))
+            # Use different description for single vs multiple videos
+            task_desc = "Downloading..." if len(videos) == 1 else "Downloading playlist..."
+            task = progress.add_task(task_desc, total=len(videos))
             
             with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
                 # Submit all download tasks
@@ -142,21 +142,23 @@ class PlaylistDownloader:
                         video_id, success, message = future.result()
                         if success:
                             results["success"] += 1
-                            if show_progress:
-                                console.print(f"[green]{message}[/green]")
                         else:
                             results["failed"] += 1
                             results["errors"].append(message)
-                            if show_progress:
-                                console.print(f"[red]{message}[/red]")
                     except Exception as e:
                         results["failed"] += 1
                         error_msg = f"✗ {video['title']}: Unexpected error: {str(e)}"
                         results["errors"].append(error_msg)
-                        if show_progress:
-                            console.print(f"[red]{error_msg}[/red]")
                     
                     progress.advance(task)
+
+        # Show success message for single video downloads
+        if len(videos) == 1 and results["success"] == 1:
+            # Get the successful download title from the message
+            for video in videos:
+                if results["success"] > 0:
+                    console.print(f"[green]✓ {video['title']}[/green]")
+                    break
 
         return results
 
