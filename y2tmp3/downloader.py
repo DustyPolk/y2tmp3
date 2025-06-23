@@ -1,58 +1,100 @@
-import yt_dlp
 import os
+from typing import Any, Optional
+
+import yt_dlp
+from rich.console import Console
+from rich.progress import (
+    BarColumn,
+    DownloadColumn,
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    TimeRemainingColumn,
+    TransferSpeedColumn,
+)
+
+from .formats import AudioFormat, AudioQuality, build_yt_dlp_postprocessor, FORMAT_CONFIGS
 from .security import sanitize_filename, secure_path_join
 
+console = Console()
 
-def download_youtube_as_mp3(url, output_path=None):
+# Global progress instance for rich progress bars
+progress_instance: Optional[Progress] = None
+task_id: Optional[int] = None
+
+
+def download_youtube_as_mp3(
+    url: str,
+    output_path: Optional[str] = None,
+    audio_format: AudioFormat = AudioFormat.MP3,
+    quality: AudioQuality = AudioQuality.HIGH,
+) -> str:
     if output_path is None:
         output_path = os.getcwd()
-    
+
     # First, extract info without downloading to get the title
     ydl_opts_info = {
-        'quiet': True,
-        'no_warnings': True,
-        'extract_flat': False,
+        "quiet": True,
+        "no_warnings": True,
+        "extract_flat": False,
     }
-    
+
     try:
         with yt_dlp.YoutubeDL(ydl_opts_info) as ydl:
             info = ydl.extract_info(url, download=False)
-            raw_title = info.get('title', 'Unknown')
-            
+            raw_title = info.get("title", "Unknown")
+
             # Sanitize the filename
             safe_filename = sanitize_filename(raw_title)
-            
-            # Create safe output path
+
+            # Create safe output path with correct extension
+            file_ext = FORMAT_CONFIGS[audio_format]["ext"]
             output_file = secure_path_join(output_path, f"{safe_filename}.%(ext)s")
-            
+
+            # Build postprocessor configuration
+            postprocessor = build_yt_dlp_postprocessor(audio_format, quality)
+
             # Download options with sanitized filename
             ydl_opts = {
-                'format': 'bestaudio/best',
-                'postprocessors': [{
-                    'key': 'FFmpegExtractAudio',
-                    'preferredcodec': 'mp3',
-                    'preferredquality': '192',
-                }],
-                'outtmpl': output_file,
-                'quiet': False,
-                'no_warnings': False,
-                'progress_hooks': [progress_hook],
+                "format": "bestaudio/best",
+                "postprocessors": [postprocessor],
+                "outtmpl": output_file,
+                "quiet": False,
+                "no_warnings": False,
+                "progress_hooks": [rich_progress_hook],
                 # Security: Restrict protocols
-                'allowed_protocols': ['http', 'https'],
+                "allowed_protocols": ["http", "https"],
                 # Security: Don't follow redirects to file:// or other protocols
-                'nocheckcertificate': False,
+                "nocheckcertificate": False,
                 # Limit download size (500MB)
-                'max_filesize': 500 * 1024 * 1024,
+                "max_filesize": 500 * 1024 * 1024,
                 # Compatibility with newer yt-dlp versions
-                'extract_flat': False,
-                'writethumbnail': False,
-                'writeinfojson': False,
+                "extract_flat": False,
+                "writethumbnail": False,
+                "writeinfojson": False,
             }
+
+            # Download the file with rich progress bar
+            global progress_instance, task_id
             
-            # Download the file
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl_download:
-                ydl_download.download([url])
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                DownloadColumn(),
+                TransferSpeedColumn(),
+                TimeRemainingColumn(),
+                console=console,
+            ) as progress:
+                progress_instance = progress
+                task_id = progress.add_task("Downloading...", total=None)
                 
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl_download:
+                    ydl_download.download([url])
+                
+                progress_instance = None
+                task_id = None
+
             return safe_filename
     except yt_dlp.DownloadError as e:
         if "Video unavailable" in str(e):
@@ -69,22 +111,51 @@ def download_youtube_as_mp3(url, output_path=None):
         raise Exception(f"Unexpected error: {str(e)}")
 
 
-def progress_hook(d):
-    if d['status'] == 'downloading':
+def rich_progress_hook(d: dict[str, Any]) -> None:
+    """Rich progress hook for yt-dlp downloads."""
+    global progress_instance, task_id
+    
+    if not progress_instance or task_id is None:
+        return
+        
+    if d["status"] == "downloading":
+        downloaded = d.get("downloaded_bytes", 0)
+        total = d.get("total_bytes") or d.get("total_bytes_estimate")
+        
+        if total:
+            progress_instance.update(task_id, completed=downloaded, total=total)
+        else:
+            # For unknown total size, just show activity
+            progress_instance.update(task_id, description="Downloading... (size unknown)")
+            
+    elif d["status"] == "finished":
+        if progress_instance and task_id is not None:
+            progress_instance.update(task_id, description="✓ Download complete, converting...")
+            progress_instance.stop_task(task_id)
+            
+    elif d["status"] == "error":
+        if progress_instance and task_id is not None:
+            error_msg = d.get("error", "Unknown error")
+            progress_instance.update(task_id, description=f"✗ Error: {error_msg}")
+
+
+def progress_hook(d: dict[str, Any]) -> None:
+    """Legacy progress hook for backward compatibility."""
+    if d["status"] == "downloading":
         # Use safer progress reporting for newer yt-dlp versions
-        downloaded = d.get('downloaded_bytes', 0)
-        total = d.get('total_bytes') or d.get('total_bytes_estimate', 0)
+        downloaded = d.get("downloaded_bytes", 0)
+        total = d.get("total_bytes") or d.get("total_bytes_estimate", 0)
         if total and total > 0:
-            percent_str = f"{(downloaded/total)*100:.1f}%"
+            percent_str = f"{(downloaded / total) * 100:.1f}%"
         else:
             percent_str = "N/A"
-        speed = d.get('speed')
+        speed = d.get("speed")
         if speed:
-            speed_str = f"{speed/1024/1024:.1f} MB/s"
+            speed_str = f"{speed / 1024 / 1024:.1f} MB/s"
         else:
             speed_str = "N/A"
-        print(f"\rDownloading: {percent_str} at {speed_str}", end='', flush=True)
-    elif d['status'] == 'finished':
-        print("\nDownload complete. Converting to MP3...")
-    elif d['status'] == 'error':
+        print(f"\rDownloading: {percent_str} at {speed_str}", end="", flush=True)
+    elif d["status"] == "finished":
+        print("\nDownload complete. Converting...")
+    elif d["status"] == "error":
         print(f"\nError occurred during download: {d.get('error', 'Unknown error')}")
