@@ -90,9 +90,10 @@ def download_youtube_as_mp3(
                 TransferSpeedColumn(),
                 TimeRemainingColumn(),
                 console=console,
+                refresh_per_second=10,  # Increase refresh rate for smoother updates
             ) as progress:
                 progress_instance = progress
-                task_id = progress.add_task("Downloading...", total=None)
+                task_id = progress.add_task("Preparing download...", total=100, completed=0)
                 
                 # Suppress yt-dlp output completely to avoid interference with Rich progress
                 with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
@@ -129,16 +130,19 @@ def rich_progress_hook(d: dict[str, Any]) -> None:
         downloaded = d.get("downloaded_bytes", 0)
         total = d.get("total_bytes") or d.get("total_bytes_estimate")
         
-        if total:
-            progress_instance.update(task_id, completed=downloaded, total=total)
+        if total and total > 0:
+            # Update with actual progress
+            progress_instance.update(task_id, completed=downloaded, total=total, description="Downloading...")
         else:
-            # For unknown total size, just show activity
-            progress_instance.update(task_id, description="Downloading... (size unknown)")
+            # For unknown total size, show downloaded bytes
+            downloaded_mb = downloaded / (1024 * 1024)
+            progress_instance.update(task_id, description=f"Downloading... {downloaded_mb:.1f} MB")
             
     elif d["status"] == "finished":
         if progress_instance and task_id is not None:
             progress_instance.update(task_id, description="✓ Download complete, converting...")
-            progress_instance.stop_task(task_id)
+            # Complete the progress bar
+            progress_instance.update(task_id, completed=100, total=100)
             
     elif d["status"] == "error":
         if progress_instance and task_id is not None:
