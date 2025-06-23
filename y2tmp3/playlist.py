@@ -46,8 +46,23 @@ class PlaylistDownloader:
                 info = ydl.extract_info(url, download=False)
                 
                 if "entries" not in info:
-                    # Single video, not a playlist
-                    return [info]
+                    # Single video, not a playlist - need to extract full info
+                    # Re-extract without flat mode to get title and other metadata
+                    ydl_opts_full = {
+                        "quiet": True,
+                        "no_warnings": True,
+                        "extract_flat": False,
+                        "noplaylist": True,  # Force single video extraction
+                    }
+                    with yt_dlp.YoutubeDL(ydl_opts_full) as ydl_full:
+                        full_info = ydl_full.extract_info(url, download=False)
+                        return [{
+                            "id": full_info.get("id", "unknown"),
+                            "title": full_info.get("title", "Unknown"),
+                            "url": url,
+                            "duration": full_info.get("duration"),
+                            "uploader": full_info.get("uploader", "Unknown"),
+                        }]
                 
                 # Filter out None entries and extract video info
                 videos = []

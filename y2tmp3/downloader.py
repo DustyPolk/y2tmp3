@@ -37,6 +37,7 @@ def download_youtube_as_mp3(
         "quiet": True,
         "no_warnings": True,
         "extract_flat": False,
+        "noplaylist": True,  # Force single video extraction even if URL has playlist params
     }
 
     try:
@@ -72,6 +73,7 @@ def download_youtube_as_mp3(
                 "extract_flat": False,
                 "writethumbnail": False,
                 "writeinfojson": False,
+                "noplaylist": True,  # Force single video download even if URL has playlist params
             }
 
             # Download the file with rich progress bar
