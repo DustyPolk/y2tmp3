@@ -167,12 +167,6 @@ def main(
         sys.exit(1)
 
     try:
-        console.print(f"[blue]Starting download from:[/blue] {youtube_url}")
-        console.print(f"[blue]Format:[/blue] {FORMAT_CONFIGS[fmt]['description']}")
-        console.print(f"[blue]Quality:[/blue] {QUALITY_DESCRIPTIONS[qual]}")
-        console.print(f"[blue]Output:[/blue] {output_dir}")
-        console.print()
-
         # Check if it's a playlist URL or user requested playlist mode
         is_playlist_url = "playlist" in youtube_url or "list=" in youtube_url
         
@@ -180,8 +174,7 @@ def main(
             handle_playlist_download(youtube_url, output_dir, fmt, qual, max_workers)
         else:
             title = download_youtube_as_mp3(youtube_url, output_dir, fmt, qual)
-            console.print(f"[green]✓ Successfully downloaded:[/green] {title}")
-            console.print(f"[green]✓ Saved to:[/green] {output_dir}")
+            console.print(f"[green]✓ {title}[/green]")
             
     except Exception as e:
         console.print(f"[red]✗ Error: {str(e)}[/red]")
@@ -225,11 +218,12 @@ def handle_playlist_download(
     downloader = PlaylistDownloader(output_dir, fmt, qual, max_workers)
     results = downloader.download_playlist(url)
     
-    # Show summary
-    console.print()
-    console.print("[bold]Download Summary:[/bold]")
-    console.print(f"[green]✓ Successful: {results['success']}[/green]")
-    console.print(f"[red]✗ Failed: {results['failed']}[/red]")
+    # Show summary only for multiple downloads
+    if results['success'] + results['failed'] > 1:
+        console.print()
+        console.print("[bold]Download Summary:[/bold]")
+        console.print(f"[green]✓ Successful: {results['success']}[/green]")
+        console.print(f"[red]✗ Failed: {results['failed']}[/red]")
     
     if results["errors"]:
         console.print("\n[bold red]Errors:[/bold red]")

@@ -1,4 +1,7 @@
 import os
+import sys
+from contextlib import redirect_stdout, redirect_stderr
+from io import StringIO
 from typing import Any, Optional
 
 import yt_dlp
@@ -60,8 +63,8 @@ def download_youtube_as_mp3(
                 "format": "bestaudio/best",
                 "postprocessors": [postprocessor],
                 "outtmpl": output_file,
-                "quiet": False,
-                "no_warnings": False,
+                "quiet": True,  # Suppress yt-dlp output to avoid interference with Rich progress
+                "no_warnings": True,  # Suppress warnings to keep output clean
                 "progress_hooks": [rich_progress_hook],
                 # Security: Restrict protocols
                 "allowed_protocols": ["http", "https"],
@@ -91,8 +94,10 @@ def download_youtube_as_mp3(
                 progress_instance = progress
                 task_id = progress.add_task("Downloading...", total=None)
                 
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl_download:
-                    ydl_download.download([url])
+                # Suppress yt-dlp output completely to avoid interference with Rich progress
+                with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl_download:
+                        ydl_download.download([url])
                 
                 progress_instance = None
                 task_id = None
